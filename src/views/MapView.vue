@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import axios from "axios";
 import debounce from "lodash.debounce";
-import GeoJson from "geojson";
 import "leaflet/dist/leaflet.css";
 import { LMap, LTileLayer, LGeoJson } from "@vue-leaflet/vue-leaflet";
 import { ref, computed, watch } from "vue";
@@ -12,7 +11,7 @@ const censuscodeItems = ref([""]);
 const censuscodeSearch = ref("");
 const censuscodeSelect = ref();
 const censuscodeLoading = ref(false);
-const drawer = ref(null);
+const sideBar = ref(null);
 
 const addressSelect = ref([""]);
 
@@ -32,7 +31,7 @@ function censuscodeItemsUpdate(v: string) {
 }
 
 function getLabel(layer: any) {
-  const props = layer.feature.properties;
+  const props = layer.feature.geometry;
   return `censuscode: ${props.censuscode}<br>blkgrpce: ${props.blkgrpce}<br>state: ${props.state}`;
 }
 
@@ -69,72 +68,56 @@ function geojsonUpdate() {
   if (censuscodeSelect.value !== undefined) {
     let res = [];
     // create the query
-    let query = `${baseURL}/app_gis/geojson?`;
+    let query = `${baseURL}/app_gis/new_geojson?`;
     for (const i in censuscodeSelect.value) {
       query = query + "censuscode=" + censuscodeSelect.value[i] + "&";
     }
     // formating query result
     axios.get(query).then((response) => {
       let datas = response.data;
-      // TODO: make an interface
+      console.log(datas);
       datas.forEach(function (item: any) {
-        let data: object;
-        if (item.type == "POLYGON") {
-          data = {
-            state: item.state,
-            censuscode: item.censuscode,
-            blkgrpce: item.blkgrpce,
-            geo_str: eval(item.geo_str),
-          };
-        } else if (item.type == "MULTIPOLYGON") {
-          data = {
-            state: item.state,
-            censuscode: item.censuscode,
-            blkgrpce: item.blkgrpce,
-            geo_metry: eval(item.geo_str),
-          };
-        }
-        res.push(data);
+        item.geojson.state = item.state;
+        item.geojson.blkgrpce = item.blkgrpce;
+        item.geojson.censuscode = item.censuscode;
+        res.push(item.geojson);
       });
-      geojsonSelect.value = GeoJson.parse(res, {
-        Polygon: "geo_str",
-        MultiPolygon: "geo_metry",
-      });
+      geojsonSelect.value = res;
     });
   }
 }
 
+function centerUpdate(new_center: any){
+  center.value = new_center;
+}
+
 function bugLog() {
-  // console.log(geojsonSelect.value.features[0].properties.censuscode);
-  // console.log(centers);
   console.log(geojsonSelect.value);
-  for (const i in geojsonSelect.value){
-    console.log(i)
-  }
 }
 </script>
 
 <template>
   <!-- sidebar -->
-  <v-navigation-drawer v-model="drawer" temporary>
-    <div class="list" v-if="geojsonSelect != null">
-      <ul>
-        <li v-for="feature in geojsonSelect.value" :key="feature">
-          {{ feature }}
-        </li>
-      </ul>
-      <!-- <h1>not null</h1> -->
+  <v-navigation-drawer v-model="sideBar" temporary>
+    <div class="list" v-if="geojsonSelect != null" style="text-align: center">
+      <h1 style="margin-top: 25px">RESULTS</h1>
+      <v-btn class="button" v-for="feature in geojsonSelect" :key="feature" @click="centerUpdate([32.3528055,-90.8777342])">
+        {{ `${feature.censuscode} - ${feature.blkgrpce}` }}
+      </v-btn>
     </div>
-    <div v-else>
-      <h1>null</h1>
+    <div v-else style="text-align: center">
+      <h1 style="margin-top: 25px">EMPTY</h1>
     </div>
   </v-navigation-drawer>
 
-  <v-toolbar>
-    <v-app-bar-nav-icon
-      @click="drawer = !drawer"
-      style="margin: 3px"
-    ></v-app-bar-nav-icon>
+  <v-toolbar style="background: #e86221; margin: 0px">
+    <v-btn @click="sideBar = !sideBar" style="margin-left: 0px">
+      <v-icon
+        icon="fa-solid fa-bars"
+        style="color: black"
+        size="x-large"
+      ></v-icon>
+    </v-btn>
 
     <v-autocomplete
       v-model="censuscodeSelect"
@@ -145,28 +128,18 @@ function bugLog() {
       type="number"
       variant="solo"
       multiple
+      clearable
       style="padding-top: 1rem; padding-right: 5px; font-size: 2rem"
     />
-    <v-btn
-      flat
-      icon="fas fa-search"
-      variant="outlined"
-      @click="geojsonUpdate"
-    />
-    <v-spacer />
+    <v-btn flat icon="fas fa-search" @click="geojsonUpdate" class="button" />
     <!-- https://vuetifyjs.com/en/components/inputs/ -->
     <v-text-field
       label="Enter Location"
       v-model="addressSelect"
       style="padding-top: 1rem; padding-right: 5px; font-size: 2rem"
     />
-    <v-btn
-      flat
-      icon="fas fa-search"
-      variant="outlined"
-      @click="addressUpdate"
-    />
-    <v-btn flat icon="fas fa-bug" variant="outlined" @click="bugLog" />
+    <v-btn flat icon="fas fa-search" @click="addressUpdate" class="button" />
+    <v-btn flat icon="fas fa-bug" @click="bugLog" />
   </v-toolbar>
   <div style="height: 87vh; width: 100vw">
     <l-map ref="map" :zoom="zoom" :center="center">
@@ -180,6 +153,8 @@ function bugLog() {
     </l-map>
   </div>
 </template>
+        <!-- url="http://{s}.mqcdn.com/tiles/1.0.0/sat/{z}/{x}/{y}.png" -->
+        <!-- :options = "{subdomains: ['otile1','otile2','otile3','otile4']}" -->
 
 <style scoped>
 .v-text-field:deep() input {
@@ -189,5 +164,11 @@ function bugLog() {
 
 .v-text-field {
   background: #212121;
+}
+
+.button {
+  margin: 3px;
+  background: #e86221;
+  color: black;
 }
 </style>
